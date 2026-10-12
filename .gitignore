@@ -1,0 +1,12 @@
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.adk/
+infra/.terraform/
+infra/*.tfstate*
+infra/terraform.tfvars
+# Stray duplicate of the top-level infra/ dir — safe to delete locally.
+src/app/infra/

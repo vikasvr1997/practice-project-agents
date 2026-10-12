@@ -1,0 +1,44 @@
+# CI/CD: test -> build image -> push -> deploy to Cloud Run.
+# _REGION, _REPO, _SERVICE and _RUNTIME_SA come from the trigger Terraform creates.
+steps:
+  - id: test
+    name: python:3.12-slim
+    entrypoint: bash
+    args:
+      - -c
+      - pip install -q -r requirements-dev.txt && APP_API_KEY=ci SESSION_BACKEND=memory pytest -q
+
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$BUILD_ID", "."]
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: ["push", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$BUILD_ID"]
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$BUILD_ID
+      - --region=${_REGION}
+      - --service-account=${_RUNTIME_SA}
+      - --set-env-vars=GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=${_MODEL_LOCATION},MODEL=${_MODEL},SESSION_BACKEND=memory
+      - --set-secrets=APP_API_KEY=app-api-key:latest
+      # The app checks the API key itself, so the URL can be public.
+      - --allow-unauthenticated
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$BUILD_ID
+
+substitutions:
+  _MODEL: gemini-3.5-flash
+  # Newer Gemini models are served from the global Vertex AI endpoint.
+  _MODEL_LOCATION: global
+
+options:
+  # Required when the build runs as a custom service account.
+  logging: CLOUD_LOGGING_ONLY

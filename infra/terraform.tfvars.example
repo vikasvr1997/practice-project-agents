@@ -1,0 +1,4 @@
+project_id   = "premium-odyssey-508202-k9"
+github_owner = "vikasvr1997"
+github_repo  = "vehicle-agent"
+# create_trigger = true   # flip on after connecting GitHub in the console
