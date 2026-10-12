@@ -1,6 +1,6 @@
 # Vehicle Safety Assistant: setup guide
 
-This project is a multi-agent assistant built with Google ADK. It answers questions about vehicle crash data in BigQuery, using Gemini on Vertex AI. It remembers each conversation in memory (no persistence across restarts yet) and sits behind a FastAPI API that needs an API key. Every push to `main` deploys it to Cloud Run.
+This project is a multi-agent assistant built with Google ADK. It answers questions about vehicle crash data in BigQuery, using Gemini on Vertex AI. It remembers each conversation in memory (no persistence across restarts yet) and sits behind a FastAPI API that needs an API key. Every push to `main` deploys it to Cloud Run via GitHub Actions; every pull request runs the test suite as a required check.
 
 ## How it fits together
 
@@ -35,8 +35,8 @@ client ──X-API-Key──▶ FastAPI (/chat, /sessions)
 | `src/app/schemas/` | Request and response models |
 | `ui.py`, `.streamlit/` | Claude-style Streamlit chat UI and its theme |
 | `tests/` | Tests: auth, an end-to-end chat with a fake model, and the tools |
-| `infra/` | Terraform: registry, secret, service accounts, build trigger |
-| `cloudbuild.yaml`, `Dockerfile` | CI/CD: test, build, deploy to Cloud Run |
+| `infra/` | Terraform: registry, secret, service accounts, Workload Identity Federation for GitHub Actions |
+| `.github/workflows/ci-cd.yml`, `Dockerfile` | CI/CD: test on every PR, build and deploy to Cloud Run on push to main |
 
 ## Run it locally first (30 min)
 
@@ -109,7 +109,7 @@ All routes except `/health` need the header `X-API-Key`.
 
 ### Step 1: Prerequisites (10 min)
 
-1. You need a GCP project **with billing turned on**. Cloud Run and Cloud Build need it, but this project stays inside the free tier at low traffic. Set a budget alert of $5 under Billing > Budgets & alerts.
+1. You need a GCP project **with billing turned on**. Cloud Run and Artifact Registry need it, but this project stays inside the free tier at low traffic. Set a budget alert of $5 under Billing > Budgets & alerts.
 2. Install Terraform 1.6 or newer.
 3. Sign in:
 
@@ -127,7 +127,7 @@ gcloud config set project YOUR_PROJECT_ID
 cd infra
 cp terraform.tfvars.example terraform.tfvars   # then edit your project ID and GitHub names
 terraform init
-terraform plan     # read this: it should list about 25 resources to create
+terraform plan     # read this: it should list about 24 resources to create
 terraform apply
 ```
 
@@ -146,20 +146,37 @@ Cloud Run passes this to the app as the `APP_API_KEY` environment variable, whic
 
 ### Step 4: Allow Gemini on Vertex AI (2 min)
 
-In the console, open Vertex AI and enable the API if it asks. The pipeline deploys with `MODEL=gemini-3.5-flash` on the `global` endpoint. If that model isn't available in your project, change `model` in `terraform.tfvars` and `_MODEL` in `cloudbuild.yaml`.
+In the console, open Vertex AI and enable the API if it asks. The pipeline deploys with whatever model is in the `GCP_MODEL` repo variable (see step 5), on the `global` endpoint.
 
-### Step 5: Connect GitHub and turn on the trigger (10 min)
+### Step 5: Point GitHub Actions at this project (5 min)
 
-1. In the console, open Cloud Build > Repositories (1st gen) > Connect repository. Choose GitHub (Cloud Build GitHub App) and select your repo. Don't create a trigger there.
-2. In `infra/terraform.tfvars`, set `create_trigger = true`, then run `terraform apply` again.
+Terraform created a Workload Identity Federation pool, so GitHub Actions authenticates to GCP without a long-lived key. Set the repo variables the workflow reads (Settings > Secrets and variables > Actions > Variables, or via `gh`):
+
+```bash
+cd infra
+WIP=$(terraform output -raw workload_identity_provider)
+BUILD_SA=$(terraform output -raw build_service_account)
+RUNTIME_SA=$(terraform output -raw runtime_service_account)
+
+gh variable set GCP_WORKLOAD_IDENTITY_PROVIDER --body "$WIP"
+gh variable set GCP_BUILD_SERVICE_ACCOUNT --body "$BUILD_SA"
+gh variable set GCP_RUNTIME_SERVICE_ACCOUNT --body "$RUNTIME_SA"
+gh variable set GCP_PROJECT_ID --body "YOUR_PROJECT_ID"
+gh variable set GCP_REGION --body "us-central1"
+gh variable set GCP_ARTIFACT_REPO --body "vehicle-agent"
+gh variable set GCP_SERVICE_NAME --body "vehicle-agent"
+gh variable set GCP_MODEL --body "gemini-3.5-flash"
+```
 
 ### Step 6: Deploy by pushing (5 min)
+
+Open a pull request first — `.github/workflows/ci-cd.yml` runs `pytest` on every PR, so you see the CI check pass before merging. Merging to `main` (or pushing directly) runs the test job again, then builds the image, pushes it to Artifact Registry, and deploys to Cloud Run.
 
 ```bash
 git push origin main
 ```
 
-Watch it run under Cloud Build > History. When it's green, test it:
+Watch it run under the repo's Actions tab. When it's green, test it:
 
 ```bash
 URL=$(gcloud run services describe vehicle-agent --region us-central1 --format='value(status.url)')
@@ -172,9 +189,9 @@ curl -X POST $URL/chat -H "X-API-Key: YOUR_KEY" -H "Content-Type: application/js
 
 | Error | Fix |
 | --- | --- |
-| Deploy step: `Permission denied ... iam.serviceaccounts.actAs` | Re-run `terraform apply`; IAM changes can take a few minutes to apply |
-| Deploy step: secret `app-api-key` has no versions | Do step 3 |
-| Agent errors on Cloud Run about an API key | Cloud Run uses Vertex AI, not your AI Studio key. Check that `GOOGLE_GENAI_USE_VERTEXAI=TRUE` is set (the pipeline sets it) |
+| Actions deploy step: `permission denied` on `iam.serviceaccounts.actAs` or on the WIF provider | Re-run `terraform apply`; IAM changes can take a few minutes to propagate |
+| Actions deploy step: secret `app-api-key` has no versions | Do step 3 |
+| Agent errors on Cloud Run about an API key | Cloud Run uses Vertex AI, not your AI Studio key. Check that `GOOGLE_GENAI_USE_VERTEXAI=TRUE` is set (the workflow sets it) |
 
 ## Known limits (good interview talking points)
 
@@ -188,5 +205,6 @@ curl -X POST $URL/chat -H "X-API-Key: YOUR_KEY" -H "Content-Type: application/js
 - **Infrastructure as code:** every resource is in Terraform, so the environment is reviewable and reproducible.
 - **Least privilege:** the app and the pipeline run as separate service accounts. Each has only the roles it needs.
 - **Secrets:** they live in Secret Manager, never in code, Git or Terraform state.
-- **CI/CD:** every push runs the tests before anything deploys, and every image is tagged with its build ID so you can roll back.
-- **Next upgrades:** remote Terraform state in GCS, a staging environment, and Workload Identity Federation for GitHub Actions.
+- **CI/CD:** GitHub Actions runs the tests on every PR as a required check, then on merge builds, pushes and deploys; every image is tagged with its commit SHA so you can roll back.
+- **Keyless CI:** GitHub Actions authenticates to GCP via Workload Identity Federation (OIDC), scoped to this exact repo — no service account key stored in GitHub.
+- **Next upgrades:** remote Terraform state in GCS and a staging environment.

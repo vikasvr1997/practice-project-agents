@@ -25,14 +25,3 @@ variable "github_repo" {
   type        = string
 }
 
-variable "create_trigger" {
-  description = "Set to true after connecting the GitHub repo to Cloud Build in the console."
-  type        = bool
-  default     = false
-}
-
-variable "model" {
-  description = "Gemini model the agents use on Vertex AI."
-  type        = string
-  default     = "gemini-3.5-flash"
-}

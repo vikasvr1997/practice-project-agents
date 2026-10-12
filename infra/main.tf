@@ -2,13 +2,17 @@
 locals {
   services = [
     "run.googleapis.com",
-    "cloudbuild.googleapis.com",
     "artifactregistry.googleapis.com",
     "secretmanager.googleapis.com",
     "aiplatform.googleapis.com",
     "bigquery.googleapis.com",
     "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
   ]
+}
+
+data "google_project" "this" {
+  project_id = var.project_id
 }
 
 resource "google_project_service" "apis" {
@@ -94,27 +98,34 @@ resource "google_service_account_iam_member" "build_acts_as_runtime" {
   member             = "serviceAccount:${google_service_account.build.email}"
 }
 
-# ---------- CI/CD trigger: every push to main deploys ----------
-resource "google_cloudbuild_trigger" "deploy_on_main" {
-  count           = var.create_trigger ? 1 : 0
-  name            = "${var.service_name}-deploy-main"
-  location        = "global"
-  filename        = "cloudbuild.yaml"
-  service_account = google_service_account.build.id
+# ---------- CI/CD: let GitHub Actions impersonate the build SA via OIDC ----------
+# No long-lived key leaves GCP; GitHub's OIDC token proves which repo is asking.
+resource "google_iam_workload_identity_pool" "github" {
+  workload_identity_pool_id = "${var.service_name}-github"
+  display_name              = "GitHub Actions"
 
-  github {
-    owner = var.github_owner
-    name  = var.github_repo
-    push {
-      branch = "^main$"
-    }
-  }
+  depends_on = [google_project_service.apis]
+}
 
-  substitutions = {
-    _REGION     = var.region
-    _REPO       = google_artifact_registry_repository.images.repository_id
-    _SERVICE    = var.service_name
-    _RUNTIME_SA = google_service_account.runtime.email
-    _MODEL      = var.model
+resource "google_iam_workload_identity_pool_provider" "github" {
+  workload_identity_pool_id         = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github"
+  display_name                      = "GitHub"
+
+  attribute_mapping = {
+    "google.subject"       = "assertion.sub"
+    "attribute.repository" = "assertion.repository"
   }
+  # Only workflows running in this exact repo can mint tokens for it.
+  attribute_condition = "assertion.repository == \"${var.github_owner}/${var.github_repo}\""
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+resource "google_service_account_iam_member" "github_actions_impersonates_build" {
+  service_account_id = google_service_account.build.name
+  role                = "roles/iam.workloadIdentityUser"
+  member              = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_owner}/${var.github_repo}"
 }
