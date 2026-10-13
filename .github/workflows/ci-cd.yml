@@ -38,19 +38,38 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
 
-      - name: Build and push image
+      - name: Build and push backend image
         run: |
           IMAGE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REPO }}/${{ vars.GCP_SERVICE_NAME }}:${{ github.sha }}"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
-      - name: Deploy to Cloud Run
+      - name: Deploy backend to Cloud Run
         run: |
           gcloud run deploy "${{ vars.GCP_SERVICE_NAME }}" \
             --image="$IMAGE" \
             --region="${{ vars.GCP_REGION }}" \
             --service-account="${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}" \
-            --set-env-vars="GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }},GOOGLE_CLOUD_LOCATION=global,MODEL=${{ vars.GCP_MODEL }},SESSION_BACKEND=memory" \
+            --set-env-vars="GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }},GOOGLE_CLOUD_LOCATION=global,MODEL=${{ vars.GCP_MODEL }},SESSION_BACKEND=firestore" \
+            --set-secrets="APP_API_KEY=app-api-key:latest" \
+            --allow-unauthenticated
+
+      - name: Build and push UI image
+        run: |
+          UI_IMAGE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REPO }}/${{ vars.GCP_SERVICE_NAME }}-ui:${{ github.sha }}"
+          docker build -f Dockerfile.ui -t "$UI_IMAGE" .
+          docker push "$UI_IMAGE"
+          echo "UI_IMAGE=$UI_IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy UI to Cloud Run
+        run: |
+          BACKEND_URL=$(gcloud run services describe "${{ vars.GCP_SERVICE_NAME }}" \
+            --region="${{ vars.GCP_REGION }}" --format="value(status.url)")
+          gcloud run deploy "${{ vars.GCP_SERVICE_NAME }}-ui" \
+            --image="$UI_IMAGE" \
+            --region="${{ vars.GCP_REGION }}" \
+            --service-account="${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}" \
+            --set-env-vars="API_URL=$BACKEND_URL" \
             --set-secrets="APP_API_KEY=app-api-key:latest" \
             --allow-unauthenticated
