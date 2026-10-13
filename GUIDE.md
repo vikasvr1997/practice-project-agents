@@ -283,3 +283,7 @@ Good to know: it **fails closed** (if Model Armor is down, the app refuses rathe
 - **CI/CD:** GitHub Actions runs the tests on every PR as a required check, then on merge builds, pushes and deploys; every image is tagged with its commit SHA so you can roll back.
 - **Keyless CI:** GitHub Actions authenticates to GCP via Workload Identity Federation (OIDC), scoped to this exact repo — no service account key stored in GitHub.
 - **Next upgrades:** remote Terraform state in GCS and a staging environment.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
