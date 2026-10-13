@@ -258,6 +258,34 @@ To add a case, edit `evals/build_evalset.py` and run `python evals/build_evalset
 
 Good to know: it **fails closed** (if Model Armor is down, the app refuses rather than answering unscreened); it screens every model call, so it adds a little cost and latency; and evals call `root_agent` directly, so they don't go through it.
 
+## Logs: finding where an agent went wrong
+
+Every request gets a `request_id` (returned in the `X-Request-ID` response header), and every step of a chat turn writes one JSON log line with it. Cloud Run sends these to Cloud Logging.
+
+| Log line | What it tells you |
+| --- | --- |
+| `agent transfer` | Which specialist the coordinator picked (`from_agent`, `to_agent`) |
+| `tool call` | Which tool ran, with its arguments (for `execute_sql`, the SQL) |
+| `tool result` / `tool error` | How many rows came back, or the exact error (WARNING) |
+| `blocked by Model Armor` | A guardrail stopped the prompt or the answer (WARNING) |
+| `model error` / `model rate limited` | Gemini failed; a 429 becomes a 503 "busy, try again" for the user |
+| `chat turn` | One summary per turn: final agent, every agent and tool, tool errors, latency. WARNING if there was no answer or a tool failed |
+| `request` | Method, path, status and latency for every API call |
+
+In the Cloud Console, open **Logging > Logs Explorer** and try:
+
+```
+resource.type="cloud_run_revision" AND resource.labels.service_name="vehicle-agent"
+jsonPayload.request_id="<id from X-Request-ID>"     # every step of one chat, in order
+jsonPayload.message="chat turn" AND severity>=WARNING  # turns that went wrong
+jsonPayload.message="tool error"                       # failing queries
+jsonPayload.user_id="vikas"                            # one user's activity
+```
+
+Or from a terminal: `gcloud logging read 'jsonPayload.request_id="<id>"' --format='value(jsonPayload.message,jsonPayload)'`.
+
+Prompts and answers are not logged unless `LOG_PROMPTS=true`, because users can type personal data. Locally, `LOG_FORMAT=text` prints readable lines instead of JSON.
+
 ## If something fails
 
 | Error | Fix |

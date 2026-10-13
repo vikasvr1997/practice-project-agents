@@ -27,6 +27,8 @@ class ApiClient:
             raise ApiError(f"Can't reach the API at {self.base_url}. Is it running? ({e})") from e
         if response.status_code == 401:
             raise ApiError("The API rejected the key. Check the API key in Settings.")
+        if response.status_code == 503:
+            raise ApiError("The model is busy right now. Please try again in a few seconds.")
         if response.status_code >= 400:
             raise ApiError(f"API error {response.status_code}: {response.text[:300]}")
         return response.json() if response.content else None

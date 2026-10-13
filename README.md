@@ -33,6 +33,7 @@ Streamlit UI ──X-API-Key──▶ FastAPI on Cloud Run (/chat, /sessions, /g
 - **Guardrails:** Model Armor blocks prompt injection, jailbreaks, harmful content and sensitive data, both going in and coming out.
 - **Graph Creator:** scans a BigQuery dataset, infers how its tables link, and proposes a property graph as DDL plus Terraform for a developer to review. It never creates anything itself.
 - **Persistent conversations:** sessions are stored in Firestore, so chats survive restarts.
+- **Structured logging:** one JSON line per agent step (transfers, tool calls, tool errors, guardrail blocks), all tied together by a request id, so you can see in Cloud Logging where an agent went wrong.
 - **Tested and evaluated:** pytest with a fake LLM (no cloud calls), plus an ADK eval set with pass thresholds.
 - **Infrastructure as code:** Terraform for every GCP resource. GitHub Actions uses keyless Workload Identity Federation.
 
