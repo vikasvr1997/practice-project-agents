@@ -6,7 +6,9 @@ WORKDIR /srv
 COPY requirements-ui.txt .
 RUN pip install --no-cache-dir -r requirements-ui.txt
 
-COPY ui.py .
+COPY ui.py ui_api.py ./
+COPY pages ./pages
+COPY .streamlit ./.streamlit
 
 RUN useradd --create-home appuser
 USER appuser

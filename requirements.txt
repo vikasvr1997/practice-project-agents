@@ -1,6 +1,7 @@
 google-adk==2.11.0
 google-cloud-bigquery>=3.2.5
 google-cloud-firestore>=2.19.0
+google-cloud-modelarmor>=0.2
 fastapi 
 uvicorn[standard]
 pydantic-settings

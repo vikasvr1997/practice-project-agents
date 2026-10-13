@@ -12,8 +12,9 @@ from __future__ import annotations
 import os
 from datetime import datetime
 
-import httpx
 import streamlit as st
+
+from ui_api import ApiClient, ApiError
 
 st.set_page_config(page_title="Vehicle Assistant", page_icon="🚗", layout="centered")
 
@@ -24,54 +25,6 @@ SUGGESTIONS = [
     "Write a short report on what we found",
 ]
 TEXT_FILE_TYPES = ["txt", "md", "csv", "json", "sql"]
-
-
-# ---------- API client ----------
-
-class ApiError(Exception):
-    pass
-
-
-class ApiClient:
-    """Small wrapper around the FastAPI backend."""
-
-    def __init__(self, base_url: str, api_key: str, user_id: str):
-        self.base_url = base_url.rstrip("/")
-        self.user_id = user_id
-        self.headers = {"X-API-Key": api_key}
-
-    def _request(self, method: str, path: str, **kwargs):
-        try:
-            # Agents can take a while (several model and BigQuery calls).
-            response = httpx.request(
-                method, self.base_url + path, headers=self.headers, timeout=180, **kwargs
-            )
-        except httpx.HTTPError as e:
-            raise ApiError(f"Can't reach the API at {self.base_url}. Is it running? ({e})") from e
-        if response.status_code == 401:
-            raise ApiError("The API rejected the key. Check the API key in Settings.")
-        if response.status_code >= 400:
-            raise ApiError(f"API error {response.status_code}: {response.text[:300]}")
-        return response.json() if response.content else None
-
-    def health(self) -> bool:
-        try:
-            return httpx.get(self.base_url + "/health", timeout=3).status_code == 200
-        except httpx.HTTPError:
-            return False
-
-    def chat(self, message: str, session_id: str | None) -> dict:
-        body = {"user_id": self.user_id, "message": message, "session_id": session_id}
-        return self._request("POST", "/chat", json=body)
-
-    def list_sessions(self) -> list[dict]:
-        return self._request("GET", f"/sessions/{self.user_id}")
-
-    def history(self, session_id: str) -> list[dict]:
-        return self._request("GET", f"/sessions/{self.user_id}/{session_id}")
-
-    def delete(self, session_id: str) -> None:
-        self._request("DELETE", f"/sessions/{self.user_id}/{session_id}")
 
 
 # ---------- state ----------
@@ -273,6 +226,13 @@ def sidebar() -> None:
 
 # ---------- main area ----------
 
+def top_bar() -> None:
+    """Buttons at the top of every chat screen."""
+    _, graph_col = st.columns([5, 1.6])
+    if graph_col.button("🕸️ Graph Creator", use_container_width=True, help="See and create BigQuery property graphs"):
+        st.switch_page("pages/graph_creator.py")
+
+
 def header() -> None:
     s = st.session_state
     if not s.session_id:
@@ -340,6 +300,7 @@ def main() -> None:
 
     settle_stopped()
 
+    top_bar()
     header()
     if not s.messages:
         empty_state()

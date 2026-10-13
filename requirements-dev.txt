@@ -1,4 +1,5 @@
 -r requirements.txt
+google-adk[eval]==2.11.0  # adk eval and the eval tests
 pytest
 pytest-asyncio
 httpx

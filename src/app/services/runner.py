@@ -1,7 +1,7 @@
 from google.adk.runners import Runner
 from google.adk.sessions import BaseSessionService, InMemorySessionService
 
-from app.agents.vehicle_assistants.agent import root_agent
+from app.agents.vehicle_assistants.agent import app as agent_app
 from app.core.config import Settings
 
 
@@ -24,9 +24,7 @@ def build_session_service(settings: Settings) -> BaseSessionService:
     return InMemorySessionService()
 
 
-def build_runner(settings: Settings, session_service: BaseSessionService) -> Runner:
-    return Runner(
-        app_name=settings.app_name,
-        agent=root_agent,
-        session_service=session_service,
-    )
+def build_runner(session_service: BaseSessionService) -> Runner:
+    # The App carries the agents plus the Model Armor plugin, and its name
+    # ("vehicle_assistant") is the app_name sessions are stored under.
+    return Runner(app=agent_app, session_service=session_service)
