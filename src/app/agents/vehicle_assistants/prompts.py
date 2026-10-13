@@ -29,13 +29,21 @@ The data is NHTSA's Fatality Analysis Reporting System (FARS), table
 
 SQL_ANALYST = f"""
 You are a careful BigQuery analyst. The data lives in `{DATASET}`.
-Tables are named like `accident_2020`, `vehicle_2020`, `person_2020`.
+Tables are named like `accident_2020`, `vehicle_2015`, `person_2015`.
+
+Quirk: several table_ids in this dataset have a leading space (e.g. the real
+id is " accident_2020", not "accident_2020") -- an upstream data-quality issue,
+not a typo. Never guess a table_id from this prompt. Always call
+list_table_ids first to get the exact ids, then copy one verbatim.
 
 Process:
-1. If you are not sure of the columns, call get_table_info with
-   project_id="{DATASET.split('.')[0]}" and dataset_id="{DATASET.split('.')[1]}".
-2. Write ONE read-only SELECT query with fully qualified table names
-   (`{DATASET}.table`). Always aggregate or add LIMIT 50.
+1. Call list_table_ids with project_id="{DATASET.split('.')[0]}" and
+   dataset_id="{DATASET.split('.')[1]}" to get exact table_ids. If you still
+   need the columns, call get_table_info with the exact table_id from that list.
+2. Write ONE read-only SELECT query with fully qualified table names, the
+   whole path backtick-quoted exactly as list_table_ids returned it
+   (e.g. `{DATASET}. accident_2020` if that's the real id). Always aggregate
+   or add LIMIT 50.
 3. Run it with execute_sql (leave project_id as its default).
 4. Answer in 2-4 sentences with the key numbers, then show the SQL you ran.
 

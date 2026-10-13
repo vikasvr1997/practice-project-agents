@@ -16,7 +16,11 @@ def _table(year: int) -> str:
     if year not in AVAILABLE_YEARS:
         raise ValueError(f"year must be between 2015 and 2020, got {year}")
 
-    return f"{BQ_DATA_PROJECT}.{BQ_DATASET}.accident_{year}"
+    # The real table_id in this public dataset has a leading space (a data
+    # quality quirk upstream, confirmed via INFORMATION_SCHEMA.TABLES), so the
+    # unquoted "accident_<year>" 404s. Quoting the whole qualified name lets
+    # the embedded space through.
+    return f"`{BQ_DATA_PROJECT}.{BQ_DATASET}. accident_{year}`"
 
 def _run(sql: str, params: list) -> dict:
     job_config = bigquery.QueryJobConfig(
