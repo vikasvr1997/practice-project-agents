@@ -15,6 +15,12 @@ variable "service_name" {
   default     = "vehicle-agent"
 }
 
+variable "firestore_location" {
+  description = "Firestore location (a multi-region like 'nam5' or a region like 'us-central1'; cannot be changed after the database is created)."
+  type        = string
+  default     = "nam5"
+}
+
 variable "github_owner" {
   description = "Your GitHub username."
   type        = string

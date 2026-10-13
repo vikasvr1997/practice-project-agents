@@ -8,6 +8,8 @@ locals {
     "bigquery.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
+    "compute.googleapis.com",
+    "firestore.googleapis.com",
   ]
 }
 
@@ -50,6 +52,15 @@ resource "google_secret_manager_secret" "app_api_key" {
   depends_on = [google_project_service.apis]
 }
 
+# ---------- Firestore (session persistence) ----------
+resource "google_firestore_database" "sessions" {
+  name        = "(default)"
+  location_id = var.firestore_location
+  type        = "FIRESTORE_NATIVE"
+
+  depends_on = [google_project_service.apis]
+}
+
 # ---------- Runtime service account (what the app runs as) ----------
 resource "google_service_account" "runtime" {
   account_id   = "${var.service_name}-run"
@@ -62,6 +73,7 @@ resource "google_project_iam_member" "runtime_roles" {
     "roles/bigquery.dataViewer",
     "roles/aiplatform.user", # call Gemini through Vertex AI
     "roles/logging.logWriter",
+    "roles/datastore.user", # read/write Firestore sessions
   ])
   project = var.project_id
   role    = each.value
@@ -85,6 +97,7 @@ resource "google_project_iam_member" "build_roles" {
     "roles/run.admin",
     "roles/artifactregistry.writer",
     "roles/logging.logWriter",
+    "roles/compute.networkUser", # lets the deploy attach Cloud Run to the proxy VPC
   ])
   project = var.project_id
   role    = each.value
