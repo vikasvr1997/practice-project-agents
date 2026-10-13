@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     app_api_key: SecretStr  # required: the app refuses to start without it
     # "firestore" in the cloud; "memory" for quick local runs and unit tests.
     session_backend: Literal["firestore", "memory"] = "memory"
+    # Only read when session_backend == "firestore".
+    google_cloud_project: Optional[str] = None
+    firestore_database: str = "(default)"
 
 
 @lru_cache

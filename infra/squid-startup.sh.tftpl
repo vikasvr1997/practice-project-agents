@@ -1,0 +1,38 @@
+#!/bin/bash
+set -euo pipefail
+
+apt-get update
+apt-get install -y squid apache2-utils jq
+
+ACCESS_TOKEN=$(curl -s -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+  | jq -r .access_token)
+
+SQUID_PASSWORD=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+  "https://secretmanager.googleapis.com/v1/projects/${project_id}/secrets/squid-proxy-password/versions/latest:access" \
+  | jq -r .payload.data | base64 -d)
+
+htpasswd -b -c /etc/squid/passwords proxyuser "$SQUID_PASSWORD"
+
+cat > /etc/squid/squid.conf <<'EOF'
+http_port 3128
+
+auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/passwords
+auth_param basic realm Enterprise Proxy
+acl authenticated proxy_auth REQUIRED
+
+acl SSL_ports port 443
+acl Safe_ports port 80
+acl Safe_ports port 443
+acl CONNECT method CONNECT
+
+http_access deny !Safe_ports
+http_access deny CONNECT !SSL_ports
+http_access allow authenticated
+http_access deny all
+
+access_log /var/log/squid/access.log
+EOF
+
+systemctl restart squid
+systemctl enable squid
