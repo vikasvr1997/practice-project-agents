@@ -41,8 +41,8 @@ def report_reply(request):
     return text(f"REPORT (used saved findings: {findings_seen})")
 
 
-@pytest.fixture
-def fake_models(monkeypatch):
+def install_fakes(monkeypatch):
+    """Swap every agent's model for a FakeLlm and BigQuery for fixed rows."""
     models = [
         (agent_module.root_agent, coordinator_reply),
         (safety_insights, safety_reply),
@@ -52,6 +52,11 @@ def fake_models(monkeypatch):
     for agent, reply in models:
         monkeypatch.setattr(agent, "model", FakeLlm(reply=reply, requests=[]))
     monkeypatch.setattr(safety_queries, "_run", lambda sql, params: {"status": "success", "rows": FAKE_ROWS})
+
+
+@pytest.fixture
+def fake_models(monkeypatch):
+    install_fakes(monkeypatch)
 
 
 def test_question_then_report_in_same_session(fake_models):

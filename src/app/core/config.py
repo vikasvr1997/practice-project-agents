@@ -10,7 +10,6 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    app_name: str = "vehicle_assistant"
     app_api_key: SecretStr  # required: the app refuses to start without it
     # "firestore" in the cloud; "memory" for quick local runs and unit tests.
     session_backend: Literal["firestore", "memory"] = "memory"

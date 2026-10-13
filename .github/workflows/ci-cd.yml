@@ -51,7 +51,7 @@ jobs:
             --image="$IMAGE" \
             --region="${{ vars.GCP_REGION }}" \
             --service-account="${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}" \
-            --set-env-vars="GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }},GOOGLE_CLOUD_LOCATION=global,MODEL=${{ vars.GCP_MODEL }},SESSION_BACKEND=firestore" \
+            --set-env-vars="GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }},GOOGLE_CLOUD_LOCATION=global,MODEL=${{ vars.GCP_MODEL }},SESSION_BACKEND=firestore,MODEL_ARMOR_TEMPLATE=${{ vars.MODEL_ARMOR_TEMPLATE }},SUPPLY_CHAIN_GRAPH=${{ vars.SUPPLY_CHAIN_GRAPH }}" \
             --set-secrets="APP_API_KEY=app-api-key:latest" \
             --allow-unauthenticated
 
