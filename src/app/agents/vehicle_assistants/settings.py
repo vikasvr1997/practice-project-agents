@@ -17,6 +17,11 @@ BQ_DATASET = os.getenv("BQ_DATASET", "nhtsa_traffic_fatalities")
 # Safety limit: refuse any query that would scan more than this.
 BQ_MAX_BYTES_BILLED = int(os.getenv("BQ_MAX_BYTES_BILLED", str(2 * 1024**3)))  # 2 GB
 
+# How long (seconds) sql_analyst's cached schema snapshot is reused before
+# refetching live from BigQuery. Longer = fewer live calls; more risk the
+# cached table list misses a table added since the last fetch.
+SQL_SCHEMA_CACHE_TTL_SECONDS = int(os.getenv("SQL_SCHEMA_CACHE_TTL_SECONDS", str(60 * 60)))  # 1 hour
+
 # Supply-chain property graph, as project.dataset.graph. Empty = the
 # supply_chain_analyst agent is left out (create the graph first; see GUIDE.md).
 SUPPLY_CHAIN_GRAPH = os.getenv("SUPPLY_CHAIN_GRAPH", "")

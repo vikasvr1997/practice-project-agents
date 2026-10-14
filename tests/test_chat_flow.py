@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.agents.vehicle_assistants import agent as agent_module
 from app.agents.vehicle_assistants.sub_agents import report_writer, safety_insights, sql_analyst
-from app.agents.vehicle_assistants.tools import safety_queries
+from app.agents.vehicle_assistants.tools import safety_queries, schema_cache
 from app.main import app
 from tests.fake_llm import FakeLlm, call, last_part, last_user_text, text
 
@@ -87,3 +87,26 @@ def test_question_then_report_in_same_session(fake_models):
 
         assert client.delete(f"/sessions/vikas/{first['session_id']}", headers=HEADERS).status_code == 204
         assert client.get(f"/sessions/vikas/{first['session_id']}", headers=HEADERS).status_code == 404
+
+
+def test_sql_analyst_gets_schema_in_instruction_without_discovery_tools(monkeypatch):
+    monkeypatch.setattr(schema_cache, "get_schema_text", lambda: "`proj.ds. accident_2020` (state_name STRING)")
+
+    def coordinator(request):
+        return call("transfer_to_agent", agent_name="sql_analyst")
+
+    def sql_analyst_reply(request):
+        assert "accident_2020" in str(request.config.system_instruction)
+        return text("12 states, 400 fatalities.")
+
+    monkeypatch.setattr(agent_module.root_agent, "model", FakeLlm(reply=coordinator, requests=[]))
+    monkeypatch.setattr(sql_analyst, "model", FakeLlm(reply=sql_analyst_reply, requests=[]))
+
+    with TestClient(app) as client:
+        out = client.post(
+            "/chat",
+            headers=HEADERS,
+            json={"user_id": "vikas", "message": "How many fatalities were there by state in 2020?"},
+        ).json()
+    assert out["agent"] == "sql_analyst"
+    assert out["answer"] == "12 states, 400 fatalities."

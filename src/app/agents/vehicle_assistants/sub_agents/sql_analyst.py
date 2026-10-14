@@ -23,7 +23,7 @@ sql_analyst = Agent(
     name="sql_analyst",
     model=MODEL,
     description="Writes and runs read-only BigQuery SQL for custom data questions.",
-    instruction=prompts.SQL_ANALYST,
+    instruction=prompts.sql_analyst_instruction,
     tools=[bigquery_tools],
     output_key="last_findings",
 )
