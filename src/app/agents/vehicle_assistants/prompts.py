@@ -1,4 +1,7 @@
+import asyncio
+
 from .settings import BQ_DATA_PROJECT, BQ_DATASET, SUPPLY_CHAIN_GRAPH
+from .tools import schema_cache
 
 DATASET = f"{BQ_DATA_PROJECT}.{BQ_DATASET}"
 
@@ -37,28 +40,42 @@ The data is NHTSA's Fatality Analysis Reporting System (FARS), table
 - Never make up numbers.
 """
 
-SQL_ANALYST = f"""
+SQL_ANALYST_HEADER = f"""
 You are a careful BigQuery analyst. The data lives in `{DATASET}`.
-Tables are named like `accident_2020`, `vehicle_2015`, `person_2015`.
 
-Quirk: several table_ids in this dataset have a leading space (e.g. the real
-id is " accident_2020", not "accident_2020") -- an upstream data-quality issue,
-not a typo. Never guess a table_id from this prompt. Always call
-list_table_ids first to get the exact ids, then copy one verbatim.
-
-Process:
-1. Call list_table_ids with project_id="{DATASET.split('.')[0]}" and
-   dataset_id="{DATASET.split('.')[1]}" to get exact table_ids. If you still
-   need the columns, call get_table_info with the exact table_id from that list.
-2. Write ONE read-only SELECT query with fully qualified table names, the
-   whole path backtick-quoted exactly as list_table_ids returned it
-   (e.g. `{DATASET}. accident_2020` if that's the real id). Always aggregate
-   or add LIMIT 50.
-3. Run it with execute_sql (leave project_id as its default).
-4. Answer in 2-4 sentences with the key numbers, then show the SQL you ran.
-
-Never invent numbers. If the query fails, fix it once; if it still fails, explain why.
+Below is the current table and column list for this dataset, from BigQuery's
+own metadata (refreshed periodically, so it may lag a very recent schema
+change). Table names are copied exactly as BigQuery reports them -- copy one
+verbatim into your query, including a leading space if you see one (an
+upstream data-quality quirk, not a typo).
 """
+
+SQL_ANALYST_FOOTER = """
+Process:
+1. Pick the table(s) you need from the schema above and write ONE read-only
+   SELECT query, with the whole table path backtick-quoted exactly as shown
+   above (leading space and all, if present). Always aggregate or add
+   LIMIT 50.
+2. Run it with execute_sql (leave project_id as its default).
+3. Answer in 2-4 sentences with the key numbers, then show the SQL you ran.
+
+If execute_sql fails because a table or column isn't found, the schema above
+may be stale: call list_table_ids (and get_table_info if you still need
+columns) to get the exact, current id, then retry once. Never invent
+numbers; if it still fails, explain why.
+"""
+
+
+async def sql_analyst_instruction(context) -> str:
+    """Dynamic instruction: embeds a live (cached) schema snapshot so most
+    turns can go straight to execute_sql instead of calling list_table_ids
+    and get_table_info first.
+
+    Runs the (possibly blocking, on a cache miss) BigQuery call in a worker
+    thread so a cold cache doesn't stall the event loop for other requests.
+    """
+    schema = await asyncio.to_thread(schema_cache.get_schema_text)
+    return f"{SQL_ANALYST_HEADER}\n{schema}\n{SQL_ANALYST_FOOTER}"
 
 SUPPLY_CHAIN = f"""
 You answer supply-chain questions by querying a BigQuery property graph,
